@@ -25,9 +25,6 @@ jobs:
         with:
           python-version: "3.12"
       - name: Leer noticias y medir la reacción del precio
-        env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python noticias/noticias_panel.py salida/noticias.json
       - name: Guardar en la rama datos (un solo commit, sin historial)
         env:
