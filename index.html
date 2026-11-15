@@ -80,6 +80,31 @@
   .periodos button.activa { background: var(--acento); border-color: var(--acento); color: #fff; }
   .aviso { background: #1c1a10; border: 1px solid #5b4a12; border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; font-size: 13px; line-height: 1.5; }
   .chipR { display: inline-block; padding: 2px 9px; margin: 2px 4px 2px 0; border-radius: 999px; border: 1.5px solid; }
+  .top3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+  .top { background: linear-gradient(160deg, #13261b, #161b24 60%); border: 1px solid #23432f; border-radius: 14px; padding: 14px; cursor: pointer;
+         transition: transform .15s ease, border-color .15s ease; }
+  .top:hover { transform: translateY(-2px); border-color: #4ade80; }
+  .top .fila { display: flex; justify-content: space-between; align-items: baseline; }
+  .top .sim { font-size: 1.25rem; font-weight: 800; }
+  .top .precio { font-size: 1.5rem; font-weight: 800; margin: 4px 0; font-variant-numeric: tabular-nums; }
+  .top .chico { font-size: 12px; color: var(--suave); }
+  .top .objetivo { margin: 8px 0 6px; font-size: 14px; }
+  .probs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .probs div { background: rgba(255,255,255,.04); border-radius: 10px; padding: 6px 8px; text-align: center; }
+  .probs span { display: block; font-size: 10.5px; color: var(--suave); }
+  .probs b { font-size: 20px; display: block; } .probs small { font-size: 10px; color: var(--suave); }
+  .controles input { background: #0b0f15; color: var(--texto); border: 1px solid var(--borde); border-radius: 8px; padding: 5px 8px; font: inherit; width: 130px; }
+  .boton { background: var(--acento); color: #fff; border: 0; border-radius: 8px; padding: 7px 14px; font: inherit; font-weight: 700; cursor: pointer; }
+  .sim h3 { font-size: 15px; margin: 14px 0 6px; }
+  .sim table td { text-align: left; } .sim table td:last-child { text-align: right; }
+  .noticia { border-bottom: 1px solid var(--borde); padding: 9px 2px; }
+  .noticia a { color: var(--texto); text-decoration: none; font-weight: 600; display: block; margin: 3px 0; }
+  .noticia a:hover { text-decoration: underline; }
+  .ncab { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
+  .nreac { font-size: 12.5px; }
+  .nivel { font-size: 10px; font-weight: 800; text-transform: uppercase; padding: 1px 7px; border-radius: 5px; background: #2a303c; color: var(--suave); }
+  .nivel.alto { background: #7f1d1d; color: #fecaca; } .nivel.medio { background: #78350f; color: #fde68a; }
+  .fuerte { color: #fbbf24; }
   footer { margin-top: 28px; color: var(--suave); font-size: 12px; border-top: 1px solid var(--borde); padding-top: 12px; }
 </style>
 </head>
@@ -105,6 +130,7 @@
     <button data-solapa="monitor" class="activa">📊 Monitor<span class="largo"> (libros en vivo)</span></button>
     <button data-solapa="tarjetas">🟩 Tarjetas<span class="largo"> y mapa de calor</span></button>
     <button data-solapa="flujo">🧵 Flujo<span class="largo"> de un activo</span></button>
+    <button data-solapa="simulador">🎲 Simulador<span class="largo"> y noticias</span></button>
     <button data-solapa="robots">🤖 Robots</button>
   </nav>
 
@@ -138,6 +164,29 @@
       </div>
       <div><h2 style="margin-top:4px">🟢 Más comprados ahora</h2><div class="grilla" id="masComprados" style="grid-template-columns:1fr"></div></div>
     </div>
+  </section>
+
+  <section class="solapa" id="s-simulador">
+    <div class="aviso">🎲 <b>Probabilidades sacadas del pasado, no garantías.</b> El mercado puede hacer algo que nunca hizo. Herramienta educativa:
+      no es una recomendación de inversión.</div>
+    <h2>🏆 Los 3 con mejores señales ahora</h2>
+    <p class="nota">Mezcla la presión de compra del escáner, la subida de la última hora y el tono de las noticias de las últimas 6 h (solo pares con
+      más de US$ 10 M de volumen). Para cada uno: objetivo según casos parecidos del pasado y la probabilidad de tocarlo. Tocá una tarjeta para ver su simulación.</p>
+    <div class="top3" id="top3"><p class="nota">Esperando los datos del escáner…</p></div>
+    <h2>🎲 Simulación de las próximas 24 h</h2>
+    <div class="controles" style="margin-top:0">
+      <label>Activo <select id="sActivo"></select></label>
+      <label>Objetivo (opcional) <input id="sObjetivo" inputmode="decimal" placeholder="automático"></label>
+      <button id="sSimular" class="boton">Simular 1000 veces</button>
+    </div>
+    <div id="sGrafico" style="height:400px"></div>
+    <div class="dos sim"><div id="sModelo"></div><div id="sHistoria"></div></div>
+    <p class="nota" id="sExplica"></p>
+    <h2>📰 Noticias en vivo y cómo movieron el precio</h2>
+    <p class="nota" id="nEstado"></p>
+    <div class="kpis" id="nResumen"></div>
+    <div class="controles" style="margin-top:0"><label>Moneda <select id="nMoneda"><option value="">Todas</option></select></label></div>
+    <div id="nLista"></div>
   </section>
 
   <section class="solapa" id="s-robots">
@@ -184,5 +233,6 @@
 </div>
 <script src="app.js"></script>
 <script src="robots.js"></script>
+<script src="sim.js"></script>
 </body>
 </html>
