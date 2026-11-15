@@ -21,6 +21,8 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 
+from telegram import configurado, enviar, esc
+
 ANTERIOR = "https://raw.githubusercontent.com/lordkindfyctyy/panel-de-activos/datos/noticias.json"
 BINANCE = "https://data-api.binance.vision/api/v3"
 FEEDS = {
@@ -145,17 +147,67 @@ def reaccion(par, t):
             "veces": round(abs(p15) / normal, 1) if normal else None}
 
 
+MAX_AVISOS = 6  # por corrida, para no llenar el celular
+
+
+def texto_aviso(n, tipo):
+    r = n.get("reaccion") or {}
+    monedas = " ".join("#" + m for m in n.get("monedas", []))
+    tono = {1: "🟢 positiva", -1: "🔴 negativa"}.get(n.get("tono"), "⚪ neutra")
+    link = n.get("link") if str(n.get("link", "")).startswith("http") else ""
+    if tipo == "alto":
+        cab = "🚨 <b>Noticia de impacto alto</b> (%s)" % tono
+    else:
+        flecha = "📈" if r["p15"] >= 0 else "📉"
+        coma = lambda v, f: (f % v).replace(".", ",")
+        cab = "%s <b>Esta noticia movió el precio:</b> %s %s%% en 15 min (%s× lo normal) · 1 h %s%%" % (
+            flecha, esc(r["par"].replace("USDT", "")), coma(r["p15"], "%+.2f"), coma(r["veces"], "%.1f"), coma(r["p60"], "%+.2f"))
+    partes = [cab, esc(n["titulo"]), "<i>%s%s</i>" % (esc(n["fuente"]), " · " + esc(", ".join(n["categorias"])) if n.get("categorias") else "")]
+    if monedas:
+        partes.append(monedas)
+    if link:
+        partes.append('<a href="%s">Leer la noticia</a>' % esc(link))
+    return "\n".join(partes)
+
+
+def avisar(todas, ahora, primera_vez=False):
+    """Manda a Telegram las noticias de impacto alto (al aparecer) y las que movieron fuerte el precio (al medirse)."""
+    pendientes = []
+    for n in sorted(todas, key=lambda x: x["t"]):
+        edad = ahora - datetime.fromisoformat(n["t"])
+        av = n.setdefault("avisos", [])
+        r = n.get("reaccion") or {}
+        if n.get("nivel") == "alto" and "alto" not in av and edad < timedelta(hours=3):
+            pendientes.append((n, "alto"))
+        if r.get("veces") and r["veces"] >= 3 and abs(r.get("p15", 0)) >= 0.5 and (n.get("monedas") or n.get("categorias")) and "mov" not in av and edad < timedelta(hours=4):
+            pendientes.append((n, "mov"))
+    if primera_vez:  # la primera vez no se manda lo viejo: solo un saludo
+        for n, tipo in pendientes:
+            n["avisos"].append(tipo)
+        enviar("✅ <b>Avisos de noticias activados.</b>\nTe voy a avisar cuando salga una noticia de impacto alto y cuando una noticia "
+               "mueva el precio 3 veces más de lo normal. Revisan cada 5 minutos.\n<i>Es información, no una recomendación de inversión.</i>")
+        return 1
+    enviados = 0
+    for n, tipo in pendientes[:MAX_AVISOS]:
+        if enviar(texto_aviso(n, tipo)):
+            n["avisos"].append(tipo)
+            enviados += 1
+    return enviados
+
+
 def main():
     salida = sys.argv[1] if len(sys.argv) > 1 else "noticias.json"
     ahora = datetime.now(timezone.utc)
     try:
-        previas = {n["id"]: n for n in bajar(ANTERIOR, True).get("noticias", [])}
+        anterior = bajar(ANTERIOR, True)
     except Exception:
-        previas = {}
+        anterior = {}
+    previas = {n["id"]: n for n in anterior.get("noticias", [])}
     nuevas, errores = leer_feeds()
     for n in nuevas:
-        if n["id"] in previas:  # conservar la reacción ya medida
+        if n["id"] in previas:  # conservar la reacción ya medida y los avisos ya mandados
             n["reaccion"] = previas[n["id"]].get("reaccion")
+            n["avisos"] = previas[n["id"]].get("avisos", [])
         previas[n["id"]] = n
     corte = ahora - timedelta(days=DIAS)
     todas = [n for n in previas.values() if datetime.fromisoformat(n["t"]) >= corte and datetime.fromisoformat(n["t"]) <= ahora + timedelta(minutes=5)]
@@ -166,7 +218,7 @@ def main():
         listados = set()
     # también monedas escritas como ticker en mayúsculas en el título ("KAVA token"), si cotizan en Binance
     for n in todas:
-        for w in re.findall(r"[A-Z][A-Z0-9]{1,9}", n["titulo"]):
+        for w in re.findall(r"\b[A-Z][A-Z0-9]{1,9}\b", n["titulo"]):
             if w not in NO_TICKERS and w + "USDT" in listados and w not in n["monedas"]:
                 n["monedas"].append(w)
     medidas = 0
@@ -180,11 +232,17 @@ def main():
             medidas += 1
         except Exception as e:
             errores.append("reacción %s: %s" % (par, str(e)[:40]))
+    telegram_activo = anterior.get("telegram_activo", False)
+    enviados = 0
+    if configurado():
+        enviados = avisar(todas, ahora, primera_vez=not telegram_activo)
+        telegram_activo = True
     os.makedirs(os.path.dirname(os.path.abspath(salida)), exist_ok=True)
     with open(salida, "w", encoding="utf-8") as f:
         json.dump({"actualizado": ahora.isoformat(timespec="seconds"), "fuentes": list(FEEDS), "errores": errores,
-                   "noticias": todas[:900]}, f, ensure_ascii=False, separators=(",", ":"))
-    print("%d noticias (%d nuevas reacciones medidas). Errores: %s" % (len(todas), medidas, "; ".join(errores) or "ninguno"))
+                   "telegram_activo": telegram_activo, "noticias": todas[:900]}, f, ensure_ascii=False, separators=(",", ":"))
+    print("%d noticias (%d nuevas reacciones medidas, %d avisos). Errores: %s" % (
+        len(todas), medidas, enviados, "; ".join(errores) or "ninguno"))
 
 
 if __name__ == "__main__":
