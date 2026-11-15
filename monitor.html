@@ -1,0 +1,213 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  html, body { margin: 0; background: #f4f6f8; color: #111827; font: 13px system-ui, "Segoe UI", sans-serif; }
+  .banda { display: flex; align-items: center; gap: 10px; padding: 9px 14px; margin: 6px 8px; border-radius: 12px;
+           background: #ecfdf5; border: 1px solid #a7f3d0; }
+  .banda.sale { background: #fef2f2; border-color: #fecaca; }
+  .banda b { white-space: nowrap; }
+  .banda .txt { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .chip { display: inline-block; padding: 2px 9px; margin-right: 6px; border-radius: 999px; background: #fff; border: 1px solid #e5e7eb; font-weight: 600; }
+  .up { color: #15803d; } .down { color: #b91c1c; }
+  .fila { display: grid; grid-template-columns: 250px minmax(330px, 1fr) minmax(220px, 300px); align-items: stretch;
+          margin: 10px 8px; height: 176px; }
+  .libro { position: relative; }
+  .libro canvas { position: absolute; inset: 0; }
+  .tarjeta { border-radius: 14px; padding: 10px 14px; border: 1.5px solid; box-shadow: 0 6px 18px rgba(15,23,42,.07);
+             display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto 1fr; column-gap: 12px; z-index: 1;
+             overflow: hidden; box-sizing: border-box; }
+  .alcista { background: linear-gradient(135deg, #f0fdf4, #dcfce7); border-color: #86efac; }
+  .bajista { background: linear-gradient(135deg, #fef2f2, #fee2e2); border-color: #fca5a5; }
+  .cabeza { display: flex; align-items: center; gap: 10px; }
+  .logo { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-weight: 900; color: #fff; font-size: 16px; }
+  .alcista .logo { background: #16a34a; } .bajista .logo { background: #dc2626; }
+  .sim { font-size: 21px; font-weight: 900; letter-spacing: .3px; line-height: 1; }
+  .nom { font-size: 11px; color: #6b7280; white-space: nowrap; }
+  .insignia { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+  .badge { padding: 3px 10px; border-radius: 6px; color: #fff; font-weight: 800; font-size: 11px; letter-spacing: .6px; }
+  .alcista .badge { background: #16a34a; } .bajista .badge { background: #dc2626; }
+  .circulo { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 11px;
+             background: #fff; border: 2.5px solid; }
+  .alcista .circulo { border-color: #16a34a; color: #15803d; } .bajista .circulo { border-color: #dc2626; color: #b91c1c; }
+  .var { font-size: 34px; font-weight: 900; letter-spacing: -1px; line-height: 1; text-align: right; align-self: start; }
+  .var.sube { color: #15803d; } .var.baja { color: #b91c1c; }
+  .precio { font-size: 12px; text-align: right; color: #374151; font-variant-numeric: tabular-nums; }
+  .niveles { grid-column: 1 / 3; align-self: end; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 6px;
+             font-variant-numeric: tabular-nums; }
+  .niveles div { background: rgba(255,255,255,.75); border-radius: 8px; padding: 4px 8px; }
+  .niveles span { display: block; font-size: 9.5px; color: #6b7280; letter-spacing: .5px; text-transform: uppercase; }
+  .niveles b { font-size: 12px; }
+  .barra { grid-column: 1 / 3; height: 4px; border-radius: 3px; margin-top: 6px;
+           background: linear-gradient(90deg, #22c55e var(--p), #ef4444 var(--p)); }
+  .grafico { position: relative; margin-left: 10px; background: #fff; border-radius: 12px; border: 1px solid #e5e7eb; }
+  .grafico canvas { position: absolute; inset: 0; }
+  .etiqueta { position: absolute; left: 8px; top: 6px; font-size: 10px; font-weight: 800; letter-spacing: .5px; padding: 2px 7px;
+              border-radius: 5px; background: #f3f4f6; color: #374151; text-transform: uppercase; }
+  .vivo { position: absolute; right: 8px; top: 7px; font-size: 10px; color: #16a34a; font-weight: 700; }
+</style></head>
+<body>
+<div class="banda" id="bentra"><b>🧠 Dinero inteligente entrando</b><span class="txt" id="entra">esperando operaciones grandes…</span></div>
+<div id="filas"></div>
+<div class="banda sale"><b>🧠 Dinero inteligente saliendo</b><span class="txt" id="sale">—</span></div>
+<script>
+const CFG = __CONFIG__;
+const DPR = window.devicePixelRatio || 1;
+const fmtP = p => p >= 1000 ? p.toLocaleString('es-AR', {maximumFractionDigits: 2}) : p >= 1 ? p.toLocaleString('es-AR', {maximumFractionDigits: 4}) : p.toPrecision(4);
+const fmtUsd = v => { const a = Math.abs(v); const s = a >= 1e6 ? (a/1e6).toFixed(2).replace('.', ',') + ' M' : a >= 1e3 ? Math.round(a/1e3) + ' mil' : Math.round(a); return (v < 0 ? '−' : '+') + 'US$ ' + s; };
+const esc = t => String(t).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+
+const estado = {};      // por símbolo: libro, hilos, flujo, precio, var...
+const grandes = {};     // símbolo -> [[t, usd con signo]] (5 min)
+
+function lienzo(cont) {
+  const c = document.createElement('canvas'); cont.appendChild(c);
+  const ajustar = () => { const r = cont.getBoundingClientRect(); c.width = r.width * DPR; c.height = r.height * DPR;
+                          c.style.width = r.width + 'px'; c.style.height = r.height + 'px'; c.getContext('2d').setTransform(DPR, 0, 0, DPR, 0, 0); c._w = r.width; c._h = r.height; };
+  ajustar(); new ResizeObserver(ajustar).observe(cont); return c;
+}
+
+for (const f of CFG.filas) {
+  const alc = f.puntaje >= 0;
+  const div = document.createElement('div'); div.className = 'fila';
+  div.innerHTML = `
+    <div class="libro"></div>
+    <div class="tarjeta ${alc ? 'alcista' : 'bajista'}">
+      <div>
+        <div class="cabeza"><div class="logo">${esc(f.base[0])}</div><div><div class="sim">${esc(f.base)}</div><div class="nom">${esc(f.nombre)}</div></div></div>
+        <div class="insignia"><span class="badge">${alc ? 'ALCISTA' : 'BAJISTA'}</span><span class="circulo">${Math.round(Math.abs(f.puntaje))}</span></div>
+      </div>
+      <div><div class="var ${f.var >= 0 ? 'sube' : 'baja'}" data-var>${(f.var >= 0 ? '+' : '') + f.var.toFixed(2).replace('.', ',')}%</div>
+           <div class="precio"><b data-precio>${fmtP(f.precio)}</b> USDT</div><div class="precio" data-compra>compra ${Math.round(f.compra)}%</div></div>
+      <div class="niveles">
+        <div><span>Soporte</span><b class="up">${fmtP(f.soporte)}</b></div>
+        <div><span>Zona</span><b>${fmtP(f.zona[0])} – ${fmtP(f.zona[1])}</b></div>
+        <div><span>Resistencia</span><b class="down">${fmtP(f.resistencia)}</b></div>
+      </div>
+      <div class="barra" data-barra style="--p:50%"></div>
+    </div>
+    <div class="grafico"><span class="etiqueta">${esc(f.etiqueta)}</span><span class="vivo">● vivo</span></div>`;
+  document.getElementById('filas').appendChild(div);
+  estado[f.simbolo] = {f, bids: [], asks: [], hilos: [], flujo: [], precio: f.precio, apertura: f.precio / (1 + f.var / 100),
+                       cLibro: lienzo(div.querySelector('.libro')), cGraf: lienzo(div.querySelector('.grafico')), el: div,
+                       recientes: []};
+}
+
+function umbral(e) {
+  if (e.recientes.length < 40) return e.f.minimo;
+  const s = [...e.recientes].sort((a, b) => a - b); return Math.max(e.f.minimo, s[Math.floor(s.length * 0.98)]);
+}
+
+function conectar() {
+  const syms = Object.keys(estado).map(s => s.toLowerCase());
+  const streams = syms.flatMap(s => [s + '@depth10@1000ms', s + '@aggTrade', s + '@miniTicker']);
+  const ws = new WebSocket('wss://data-stream.binance.vision/stream?streams=' + streams.join('/'));
+  ws.onclose = () => setTimeout(conectar, 2500);
+  ws.onmessage = ev => {
+    const m = JSON.parse(ev.data), d = m.data, sym = m.stream.split('@')[0].toUpperCase(), e = estado[sym];
+    if (!e) return;
+    if (m.stream.includes('@depth')) { e.bids = d.bids.map(x => [+x[0], +x[1]]); e.asks = d.asks.map(x => [+x[0], +x[1]]); return; }
+    if (m.stream.endsWith('@miniTicker')) {
+      e.precio = +d.c; e.apertura = +d.o; const v = (e.precio / e.apertura - 1) * 100;
+      const ev = e.el.querySelector('[data-var]'); ev.textContent = (v >= 0 ? '+' : '') + v.toFixed(2).replace('.', ',') + '%';
+      ev.classList.toggle('sube', v >= 0); ev.classList.toggle('baja', v < 0);
+      e.el.querySelector('[data-precio]').textContent = fmtP(e.precio);
+      return;
+    }
+    const precio = +d.p, usd = precio * (+d.q), compra = !d.m, ahora = performance.now();
+    e.recientes.push(usd); if (e.recientes.length > 1500) e.recientes.shift();
+    const grande = usd >= umbral(e);
+    e.hilos.push({precio, usd, compra, t: ahora, grande, desvio: Math.random()}); if (e.hilos.length > 160) e.hilos.shift();
+    e.flujo.push([ahora, usd, compra]);
+    if (grande) (grandes[sym] = grandes[sym] || []).push([Date.now(), compra ? usd : -usd]);
+  };
+}
+
+function dibujarLibro(e, ahora) {
+  const c = e.cLibro, ctx = c.getContext('2d'), W = c._w, H = c._h;
+  ctx.clearRect(0, 0, W, H);
+  const n = Math.min(10, e.bids.length, e.asks.length), anchoLibro = W - 46, medio = H / 2;
+  // flujo del último minuto → color del hilo principal
+  const corte = ahora - 60000; while (e.flujo.length && e.flujo[0][0] < corte) e.flujo.shift();
+  let fc = 0, fv = 0; for (const [, u, k] of e.flujo) k ? fc += u : fv += u;
+  const pc = fc + fv ? fc / (fc + fv) : 0.5;
+  e.el.querySelector('[data-barra]').style.setProperty('--p', Math.round(pc * 100) + '%');
+  e.el.querySelector('[data-compra]').textContent = 'compra ' + Math.round(pc * 100) + '% (1 min)';
+  if (!n) { ctx.fillStyle = '#9ca3af'; ctx.fillText('cargando libro…', 8, medio); return; }
+  const fila = (H - 16) / (2 * n);
+  const maxU = Math.max(...e.bids.slice(0, n).map(b => b[0] * b[1]), ...e.asks.slice(0, n).map(a => a[0] * a[1]));
+  const yDe = p => {
+    if (p >= e.asks[0][0]) { const r = (p - e.asks[0][0]) / Math.max(1e-12, e.asks[n - 1][0] - e.asks[0][0]); return medio - 6 - Math.min(1, r) * (medio - 10); }
+    if (p <= e.bids[0][0]) { const r = (e.bids[0][0] - p) / Math.max(1e-12, e.bids[0][0] - e.bids[n - 1][0]); return medio + 6 + Math.min(1, r) * (medio - 10); }
+    return medio;
+  };
+  ctx.font = '10px ui-monospace, Consolas, monospace'; ctx.textBaseline = 'middle';
+  for (let i = 0; i < n; i++) {
+    for (const [lado, arr, col, txt] of [[-1, e.asks, 'rgba(239,68,68,', '#b91c1c'], [1, e.bids, 'rgba(34,197,94,', '#15803d']]) {
+      const [p, q] = arr[i], y = medio + lado * (6 + (i + 0.5) * fila), w = Math.max(2, (p * q / maxU) * (anchoLibro - 70));
+      ctx.fillStyle = col + (0.18 + 0.5 * (1 - i / n)) + ')'; ctx.fillRect(anchoLibro - w, y - fila / 2 + 0.6, w, fila - 1.2);
+      ctx.fillStyle = txt; ctx.fillText(fmtP(p), 2, y);
+    }
+  }
+  ctx.fillStyle = '#111827'; ctx.font = 'bold 11px ui-monospace, Consolas, monospace'; ctx.fillText(fmtP((e.bids[0][0] + e.asks[0][0]) / 2), 2, medio);
+  // hilo principal: del precio actual del libro a la tarjeta, verde si dominan las compras del último minuto, rojo si las ventas
+  const colP = pc >= 0.5 ? [22, 163, 74] : [220, 38, 38], intens = Math.abs(pc - 0.5) * 2;
+  ctx.beginPath(); ctx.moveTo(anchoLibro, medio); ctx.bezierCurveTo(anchoLibro + 22, medio, W - 22, medio + (pc >= .5 ? -18 : 18) * intens, W, medio);
+  ctx.strokeStyle = `rgba(${colP},.95)`; ctx.lineWidth = 2.5 + 3 * intens; ctx.stroke();
+  ctx.beginPath(); ctx.arc(anchoLibro, medio, 4, 0, 7); ctx.fillStyle = `rgb(${colP})`; ctx.fill();
+  // un hilo por operación: sale de su precio en el libro y va hacia la tarjeta (sube si es compra, baja si es venta)
+  const vida = 2600;
+  for (let i = e.hilos.length - 1; i >= 0; i--) {
+    const h = e.hilos[i], edad = ahora - h.t;
+    if (edad > vida) { e.hilos.splice(i, 1); continue; }
+    const a = 1 - edad / vida, y1 = yDe(h.precio), av = Math.min(1, edad / 500);
+    const xf = anchoLibro + (W - anchoLibro) * av, yf = y1 + (h.compra ? -1 : 1) * (14 + h.desvio * 22) * av;
+    const col = h.compra ? '22,163,74' : '220,38,38';
+    ctx.beginPath(); ctx.moveTo(anchoLibro - 30 * (1 - av), y1); ctx.quadraticCurveTo(anchoLibro + (xf - anchoLibro) * 0.5, y1, xf, yf);
+    ctx.strokeStyle = `rgba(${col},${a * (h.grande ? 1 : 0.55)})`; ctx.lineWidth = h.grande ? 3 : Math.max(0.7, Math.min(2.2, Math.log10(h.usd + 1) - 2));
+    if (h.grande) { ctx.shadowColor = `rgba(${col},.8)`; ctx.shadowBlur = 10; } ctx.stroke(); ctx.shadowBlur = 0;
+  }
+}
+
+function dibujarGrafico(e) {
+  const c = e.cGraf, ctx = c.getContext('2d'), W = c._w, H = c._h, f = e.f;
+  ctx.clearRect(0, 0, W, H);
+  const datos = [...f.cierres, e.precio], min = Math.min(...datos, f.soporte), max = Math.max(...datos, f.resistencia);
+  const pad = 22, y = v => H - 10 - (v - min) / Math.max(1e-12, max - min) * (H - pad - 14), x = i => 8 + i / (datos.length - 1) * (W - 70);
+  // zona
+  ctx.fillStyle = 'rgba(59,130,246,.08)'; ctx.fillRect(8, y(f.zona[1]), W - 70, y(f.zona[0]) - y(f.zona[1]));
+  for (const [v, col, nom] of [[f.soporte, '#16a34a', 'S'], [f.resistencia, '#dc2626', 'R']]) {
+    ctx.setLineDash([4, 4]); ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(8, y(v)); ctx.lineTo(W - 62, y(v)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = col; ctx.font = '10px ui-monospace, Consolas, monospace'; ctx.textBaseline = 'middle'; ctx.fillText(nom + ' ' + fmtP(v), W - 58, y(v));
+  }
+  const sube = e.precio >= datos[0], col = sube ? '22,163,74' : '220,38,38';
+  const g = ctx.createLinearGradient(0, pad, 0, H); g.addColorStop(0, `rgba(${col},.22)`); g.addColorStop(1, `rgba(${col},0)`);
+  ctx.beginPath(); datos.forEach((v, i) => i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v)));
+  ctx.strokeStyle = `rgb(${col})`; ctx.lineWidth = 1.8; ctx.stroke();
+  ctx.lineTo(x(datos.length - 1), H); ctx.lineTo(x(0), H); ctx.closePath(); ctx.fillStyle = g; ctx.fill();
+  ctx.beginPath(); ctx.arc(x(datos.length - 1), y(e.precio), 3.5, 0, 7); ctx.fillStyle = `rgb(${col})`; ctx.fill();
+}
+
+function resumenInteligente() {
+  const corte = Date.now() - 5 * 60 * 1000, netos = [];
+  for (const [s, l] of Object.entries(grandes)) {
+    while (l.length && l[0][0] < corte) l.shift();
+    if (l.length) netos.push([s.replace('USDT', ''), l.reduce((a, x) => a + x[1], 0), l.length]);
+  }
+  netos.sort((a, b) => b[1] - a[1]);
+  const chips = arr => arr.map(([s, v, k]) => `<span class="chip"><span class="${v >= 0 ? 'up' : 'down'}">${esc(s)}</span> ${fmtUsd(v)} <small>(${k} op.)</small></span>`).join('');
+  const entra = netos.filter(x => x[1] > 0).slice(0, 5), sale = netos.filter(x => x[1] < 0).reverse().slice(0, 5);
+  document.getElementById('entra').innerHTML = entra.length ? '→ va hacia ' + chips(entra) : 'sin compras grandes en los últimos 5 min';
+  document.getElementById('sale').innerHTML = sale.length ? '← sale de ' + chips(sale) : 'sin ventas grandes en los últimos 5 min';
+}
+setInterval(resumenInteligente, 1000);
+
+let ultimoGraf = 0;
+function cuadro(ahora) {
+  for (const e of Object.values(estado)) dibujarLibro(e, ahora);
+  if (ahora - ultimoGraf > 1000) { for (const e of Object.values(estado)) dibujarGrafico(e); ultimoGraf = ahora; }
+  requestAnimationFrame(cuadro);
+}
+conectar();
+requestAnimationFrame(cuadro);
+</script>
+</body></html>

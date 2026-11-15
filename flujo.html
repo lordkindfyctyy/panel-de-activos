@@ -1,0 +1,165 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  html, body { margin: 0; background: #0e1117; color: #e5e7eb; font: 13px system-ui, "Segoe UI", sans-serif; overflow: hidden; }
+  .banda { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 12px; margin: 4px 6px;
+           background: linear-gradient(90deg, rgba(34,197,94,.16), rgba(34,197,94,.03)); border: 1px solid rgba(34,197,94,.35); }
+  .banda.abajo { background: linear-gradient(90deg, rgba(239,68,68,.16), rgba(239,68,68,.03)); border-color: rgba(239,68,68,.35); }
+  .banda b { white-space: nowrap; }
+  .banda .txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip { display: inline-block; padding: 1px 8px; margin-right: 6px; border-radius: 999px; background: rgba(255,255,255,.08); font-weight: 600; }
+  .up { color: #4ade80; } .down { color: #f87171; }
+  #lienzo { display: block; }
+  .estado { position: absolute; right: 14px; top: 52px; font-size: 11px; color: #9ca3af; }
+</style></head>
+<body>
+<div class="banda" id="arriba"><b>🧠 Dinero inteligente entrando</b><span class="txt" id="entra">esperando operaciones grandes…</span></div>
+<canvas id="lienzo"></canvas>
+<div class="estado" id="estado">conectando…</div>
+<div class="banda abajo" id="abajo"><b>🧠 Saliendo</b><span class="txt" id="sale">—</span></div>
+<script>
+const CFG = __CONFIG__;               // {simbolo, lista, alto}
+const SIM = CFG.simbolo.toLowerCase();
+const cv = document.getElementById('lienzo'), ctx = cv.getContext('2d');
+const DPR = window.devicePixelRatio || 1;
+let W = 0, H = 0;
+function medir() {
+  W = window.innerWidth; H = CFG.alto - 2 * 46;
+  cv.width = W * DPR; cv.height = H * DPR; cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+medir(); window.addEventListener('resize', medir);
+
+let bids = [], asks = [];               // [[precio, cantidad], ...] mejores 20
+const hilos = [];                       // operaciones dibujándose
+const flujo = [];                       // [t, usd, compra] del último minuto (barras de la derecha)
+const recientes = [];                   // tamaños de operaciones del par elegido (para el umbral de "grandes")
+const grandes = {};                     // símbolo -> [[t, usd con signo], ...] últimos 5 min
+let ultimoMsg = 0;
+
+const fmtUsd = v => { const a = Math.abs(v); const s = a >= 1e6 ? (a/1e6).toFixed(2) + ' M' : a >= 1e3 ? (a/1e3).toFixed(0) + ' mil' : a.toFixed(0); return (v < 0 ? '−' : '+') + 'US$ ' + s; };
+const fmtP = p => p >= 1000 ? p.toLocaleString('es-AR', {maximumFractionDigits: 2}) : p >= 1 ? p.toFixed(4) : p.toPrecision(5);
+
+function umbral() {
+  // "dinero inteligente": las operaciones del 2 % más grande, como mínimo US$ 50 mil (o 5 mil en monedas chicas)
+  if (recientes.length < 50) return CFG.minimo;
+  const s = [...recientes].sort((a, b) => a - b);
+  return Math.max(CFG.minimo, s[Math.floor(s.length * 0.98)]);
+}
+
+function conectar() {
+  const streams = [SIM + '@depth20@100ms', ...CFG.lista.map(s => s.toLowerCase() + '@aggTrade')];
+  const ws = new WebSocket('wss://data-stream.binance.vision/stream?streams=' + [...new Set(streams)].join('/'));
+  ws.onopen = () => document.getElementById('estado').textContent = '● en vivo · ' + CFG.simbolo.replace('USDT', '/USDT');
+  ws.onclose = () => { document.getElementById('estado').textContent = 'reconectando…'; setTimeout(conectar, 2500); };
+  ws.onmessage = ev => {
+    ultimoMsg = Date.now();
+    const m = JSON.parse(ev.data), d = m.data;
+    if (m.stream.endsWith('@depth20@100ms')) {
+      bids = d.bids.map(x => [+x[0], +x[1]]); asks = d.asks.map(x => [+x[0], +x[1]]);
+      return;
+    }
+    const sym = d.s, precio = +d.p, usd = precio * (+d.q), compra = !d.m;   // m = el comprador era "maker" → vendió el agresor
+    if (sym.toLowerCase() === SIM) {
+      recientes.push(usd); if (recientes.length > 2000) recientes.shift();
+      const grande = usd >= umbral();
+      hilos.push({precio, usd, compra, t: performance.now(), grande, curva: 0.35 + Math.random() * 0.4});
+      flujo.push([performance.now(), usd, compra]);
+      if (hilos.length > 400) hilos.shift();
+    }
+    if (usd >= (sym.toLowerCase() === SIM ? umbral() : CFG.minimo)) {
+      (grandes[sym] = grandes[sym] || []).push([Date.now(), compra ? usd : -usd]);
+    }
+  };
+}
+
+function resumenInteligente() {
+  const corte = Date.now() - 5 * 60 * 1000, netos = [];
+  for (const [s, l] of Object.entries(grandes)) {
+    while (l.length && l[0][0] < corte) l.shift();
+    if (l.length) netos.push([s.replace('USDT', ''), l.reduce((a, x) => a + x[1], 0), l.length]);
+  }
+  netos.sort((a, b) => b[1] - a[1]);
+  const chips = arr => arr.map(([s, v, n]) => `<span class="chip"><span class="${v >= 0 ? 'up' : 'down'}">${s}</span> ${fmtUsd(v)} <small>(${n})</small></span>`).join('');
+  const entra = netos.filter(x => x[1] > 0).slice(0, 4), sale = netos.filter(x => x[1] < 0).reverse().slice(0, 4);
+  const mio = netos.find(x => x[0] === CFG.simbolo.replace('USDT', ''));
+  const dir = mio ? (mio[1] >= 0 ? `<b class="up">en ${mio[0]} está COMPRANDO ${fmtUsd(mio[1])}</b> · ` : `<b class="down">en ${mio[0]} está VENDIENDO ${fmtUsd(mio[1])}</b> · `) : '';
+  document.getElementById('entra').innerHTML = entra.length ? chips(entra) : 'sin compras grandes en 5 min';
+  document.getElementById('sale').innerHTML = dir + (sale.length ? chips(sale) : 'sin ventas grandes en 5 min');
+}
+setInterval(resumenInteligente, 1000);
+
+function dibujar(ahora) {
+  ctx.clearRect(0, 0, W, H);
+  const libroW = Math.min(300, Math.max(220, W * 0.32)), x0 = libroW + 8;
+  const filas = Math.min(16, bids.length, asks.length);
+  if (filas > 0) {
+    const fila = (H - 30) / (2 * filas), medioY = H / 2;
+    const maxQ = Math.max(...bids.slice(0, filas).map(b => b[0] * b[1]), ...asks.slice(0, filas).map(a => a[0] * a[1]));
+    const alto = asks[filas - 1][0], bajo = bids[filas - 1][0];
+    const yDe = p => p >= asks[0][0] ? medioY - 12 - ((p - asks[0][0]) / Math.max(1e-12, alto - asks[0][0])) * (medioY - 20)
+                    : p <= bids[0][0] ? medioY + 12 + ((bids[0][0] - p) / Math.max(1e-12, bids[0][0] - bajo)) * (medioY - 20) : medioY;
+    // ventas (arriba, la más cercana al medio abajo de todo)
+    ctx.font = '12px ui-monospace, Consolas, monospace'; ctx.textBaseline = 'middle';
+    for (let i = 0; i < filas; i++) {
+      const [p, q] = asks[i], y = medioY - 12 - (i + 0.5) * fila, w = (p * q / maxQ) * (libroW - 10);
+      ctx.fillStyle = 'rgba(239,68,68,.22)'; ctx.fillRect(libroW - w, y - fila / 2 + 1, w, fila - 2);
+      ctx.fillStyle = '#f87171'; ctx.fillText(fmtP(p), 6, y);
+      ctx.fillStyle = '#9ca3af'; ctx.textAlign = 'right'; ctx.fillText(fmtUsd(p * q).replace('+', ''), libroW - 6, y); ctx.textAlign = 'left';
+    }
+    for (let i = 0; i < filas; i++) {
+      const [p, q] = bids[i], y = medioY + 12 + (i + 0.5) * fila, w = (p * q / maxQ) * (libroW - 10);
+      ctx.fillStyle = 'rgba(34,197,94,.22)'; ctx.fillRect(libroW - w, y - fila / 2 + 1, w, fila - 2);
+      ctx.fillStyle = '#4ade80'; ctx.fillText(fmtP(p), 6, y);
+      ctx.fillStyle = '#9ca3af'; ctx.textAlign = 'right'; ctx.fillText(fmtUsd(p * q).replace('+', ''), libroW - 6, y); ctx.textAlign = 'left';
+    }
+    // precio medio
+    const medio = (bids[0][0] + asks[0][0]) / 2;
+    ctx.fillStyle = '#111827'; ctx.fillRect(0, medioY - 11, libroW, 22);
+    ctx.strokeStyle = 'rgba(255,255,255,.15)'; ctx.strokeRect(0.5, medioY - 10.5, libroW - 1, 21);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 13px ui-monospace, Consolas, monospace'; ctx.fillText(fmtP(medio), 6, medioY);
+    const desb = (bids.slice(0, filas).reduce((a, b) => a + b[0] * b[1], 0) - asks.slice(0, filas).reduce((a, b) => a + b[0] * b[1], 0)) /
+                 (bids.slice(0, filas).reduce((a, b) => a + b[0] * b[1], 0) + asks.slice(0, filas).reduce((a, b) => a + b[0] * b[1], 0));
+    ctx.textAlign = 'right'; ctx.fillStyle = desb >= 0 ? '#4ade80' : '#f87171';
+    ctx.fillText((desb >= 0 ? 'libro comprador ' : 'libro vendedor ') + Math.round(Math.abs(desb) * 100) + '%', libroW - 6, medioY); ctx.textAlign = 'left';
+
+    // hilos: de cada precio del libro hacia arriba (compra) o hacia abajo (venta)
+    const vida = 4200;
+    for (let i = hilos.length - 1; i >= 0; i--) {
+      const h = hilos[i], edad = ahora - h.t;
+      if (edad > vida) { hilos.splice(i, 1); continue; }
+      const k = edad / vida, alfa = (1 - k) * (h.grande ? 1 : 0.75);
+      const y1 = Math.max(4, Math.min(H - 4, yDe(h.precio)));
+      const avance = Math.min(1, edad / 900);                       // el hilo crece durante 0,9 s
+      const xf = x0 + (W - x0 - 20) * (0.55 + h.curva * 0.6) * avance;
+      const yf = h.compra ? y1 - (y1 - 8) * avance : y1 + (H - 8 - y1) * avance;
+      const grosor = Math.max(0.8, Math.min(7, Math.log10(h.usd + 1) - 1.5)) * (h.grande ? 1.6 : 1);
+      const col = h.compra ? [34, 197, 94] : [239, 68, 68];
+      ctx.beginPath(); ctx.moveTo(libroW, y1);
+      ctx.bezierCurveTo(libroW + (xf - libroW) * 0.45, y1, xf - (xf - libroW) * 0.2, yf, xf, yf);
+      ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${alfa})`; ctx.lineWidth = grosor;
+      if (h.grande) { ctx.shadowColor = `rgba(${col[0]},${col[1]},${col[2]},.9)`; ctx.shadowBlur = 14; }
+      ctx.stroke(); ctx.shadowBlur = 0;
+      if (h.grande && avance >= 1) {
+        ctx.fillStyle = `rgba(255,255,255,${alfa})`; ctx.font = 'bold 12px system-ui';
+        ctx.fillText((h.compra ? '▲ ' : '▼ ') + fmtUsd(h.usd).replace('+', ''), Math.min(W - 90, xf + 6), yf + (h.compra ? 10 : -10));
+      }
+    }
+    // flujo del último minuto (barras a la derecha)
+    const corte = ahora - 60000;
+    while (flujo.length && flujo[0][0] < corte) flujo.shift();
+    let fc = 0, fv = 0;
+    for (const [, u, c] of flujo) (c ? fc += u : fv += u);
+    const tot = fc + fv || 1, bx = W - 12;
+    ctx.fillStyle = 'rgba(34,197,94,.7)'; ctx.fillRect(bx, H / 2 - (fc / tot) * (H / 2 - 10), 6, (fc / tot) * (H / 2 - 10));
+    ctx.fillStyle = 'rgba(239,68,68,.7)'; ctx.fillRect(bx, H / 2, 6, (fv / tot) * (H / 2 - 10));
+  } else {
+    ctx.fillStyle = '#9ca3af'; ctx.fillText('Esperando el libro de órdenes…', 12, 20);
+  }
+  if (ultimoMsg && Date.now() - ultimoMsg > 8000) document.getElementById('estado').textContent = 'sin datos hace un rato…';
+  requestAnimationFrame(dibujar);
+}
+conectar();
+requestAnimationFrame(dibujar);
+</script>
+</body></html>

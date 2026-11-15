@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel de activos en vivo</title>
+<meta name="description" content="Escáner en vivo de las criptomonedas con más presión de compra: libros de órdenes, flujo de operaciones, dinero inteligente y mapa de calor. Datos públicos de Binance.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<style>
+  :root { --fondo: #0e1117; --panel: #161b24; --borde: #262c38; --texto: #e5e7eb; --suave: #9ca3af; --acento: #ef4444; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--fondo); color: var(--texto); font: 14px system-ui, "Segoe UI", Roboto, sans-serif; }
+  .contenedor { max-width: 1280px; margin: 0 auto; padding: 18px 16px 40px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+  h1 { margin: 0; font-size: clamp(22px, 4vw, 32px); font-weight: 800; }
+  .sub { color: var(--suave); font-size: 13px; }
+  .controles { display: flex; flex-wrap: wrap; gap: 10px 16px; margin: 14px 0 10px; padding: 10px 12px; background: var(--panel);
+               border: 1px solid var(--borde); border-radius: 12px; align-items: center; }
+  .controles label { display: flex; align-items: center; gap: 6px; color: var(--suave); font-size: 13px; }
+  select { background: #0b0f15; color: var(--texto); border: 1px solid var(--borde); border-radius: 8px; padding: 5px 8px; font: inherit; }
+  .estado { margin-left: auto; font-size: 12px; color: var(--suave); }
+  .estado b { color: #4ade80; }
+  nav { display: flex; gap: 4px; border-bottom: 1px solid var(--borde); margin: 8px 0 14px; overflow-x: auto; }
+  nav button { background: none; border: 0; color: var(--suave); font: inherit; font-weight: 600; padding: 10px 12px; cursor: pointer;
+               border-bottom: 2px solid transparent; white-space: nowrap; }
+  nav button.activa { color: var(--acento); border-bottom-color: var(--acento); }
+  .solapa { display: none; } .solapa.activa { display: block; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .kpi { background: var(--panel); border: 1px solid var(--borde); border-radius: 12px; padding: 10px 14px; }
+  .kpi span { color: var(--suave); font-size: 12px; } .kpi b { display: block; font-size: 24px; margin-top: 2px; }
+  .kpi small { color: var(--suave); }
+  h2 { font-size: 19px; margin: 18px 0 10px; }
+  .grilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 10px; }
+  .tarjeta { border-radius: 14px; padding: 12px 14px; color: #fff; border: 1px solid rgba(255,255,255,.08);
+             box-shadow: 0 4px 14px rgba(0,0,0,.25); transition: background-color .8s ease; }
+  .tarjeta .fila { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+  .tarjeta .sim { font-weight: 800; font-size: 1.1rem; }
+  .tarjeta .var { font-weight: 800; }
+  .tarjeta .precio { font-size: 1.3rem; font-weight: 700; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
+  .tarjeta .chico { font-size: .76rem; opacity: .88; font-variant-numeric: tabular-nums; }
+  .tarjeta .barra { height: 5px; border-radius: 3px; background: rgba(255,255,255,.18); margin-top: 7px; overflow: hidden; }
+  .tarjeta .barra > div { height: 100%; background: #fff; }
+  .dos { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; }
+  @media (max-width: 860px) { .dos { grid-template-columns: 1fr; } }
+  .tabla { max-height: 440px; overflow: auto; border: 1px solid var(--borde); border-radius: 12px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
+  th, td { padding: 6px 9px; text-align: right; border-bottom: 1px solid var(--borde); white-space: nowrap; }
+  th { position: sticky; top: 0; background: var(--panel); color: var(--suave); font-weight: 600; }
+  td:first-child, th:first-child { text-align: left; font-weight: 700; }
+  .pbar { display: inline-block; width: 70px; height: 6px; border-radius: 3px; background: #2a303c; vertical-align: middle; margin-right: 6px; position: relative; overflow: hidden; }
+  .pbar i { position: absolute; top: 0; bottom: 0; }
+  .up { color: #4ade80; } .down { color: #f87171; }
+  iframe { width: 100%; border: 0; display: block; border-radius: 12px; }
+  .marco { overflow-x: auto; border-radius: 12px; }
+  .nota { color: var(--suave); font-size: 12.5px; line-height: 1.5; margin-top: 8px; }
+  .flujo { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; }
+  @media (max-width: 860px) { .flujo { grid-template-columns: 1fr; } }
+  .cargando { color: var(--suave); padding: 30px 0; }
+  footer { margin-top: 28px; color: var(--suave); font-size: 12px; border-top: 1px solid var(--borde); padding-top: 12px; }
+</style>
+</head>
+<body>
+<div class="contenedor">
+  <header>
+    <h1>📈 Panel de activos en vivo</h1>
+    <span class="sub">Las criptomonedas con más presión de compra ahora · datos públicos de Binance</span>
+  </header>
+
+  <div class="controles">
+    <label>Activos <select id="cN"><option>20</option><option selected>30</option><option>40</option><option>50</option></select></label>
+    <label>Ordenar por <select id="cOrden">
+      <option value="puntaje">Presión de compra</option><option value="var">Variación 24 h</option>
+      <option value="vol24">Volumen 24 h</option><option value="volx">Volumen anómalo</option></select></label>
+    <label>Color <select id="cColor"><option value="puntaje">Presión de compra</option><option value="var">Variación 24 h</option></select></label>
+    <label>Filas del monitor <select id="cFilas"><option>4</option><option>6</option><option selected>8</option><option>10</option><option>12</option></select></label>
+    <label>Actualizar cada <select id="cRef"><option value="10">10 s</option><option value="15" selected>15 s</option><option value="30">30 s</option><option value="60">60 s</option></select></label>
+    <span class="estado" id="estado">cargando…</span>
+  </div>
+
+  <nav>
+    <button data-solapa="monitor" class="activa">📊 Monitor (libros en vivo)</button>
+    <button data-solapa="tarjetas">🟩 Tarjetas y mapa de calor</button>
+    <button data-solapa="flujo">🧵 Flujo de un activo</button>
+  </nav>
+
+  <section class="solapa activa" id="s-monitor">
+    <div class="marco" id="monitorMarco"><div class="cargando">Buscando los activos con más presión de compra y de venta…</div></div>
+    <p class="nota">Cada fila: a la izquierda el libro de órdenes en vivo (ventas arriba en rojo, compras abajo en verde). El hilo grueso
+      une el precio con la tarjeta: verde si en el último minuto dominaron las compras, rojo si las ventas. Los hilos finos son cada
+      operación (suben si son compras, bajan si son ventas; los que brillan son grandes). Arriba y abajo: hacia dónde va y de dónde sale el
+      <b>dinero inteligente</b> (operaciones grandes de los últimos 5 min). Las tarjetas se recalculan cada 3 minutos.</p>
+  </section>
+
+  <section class="solapa" id="s-tarjetas">
+    <div class="kpis" id="kpis"></div>
+    <h2>🔥 Destacados del momento</h2>
+    <div class="grilla" id="destacados"></div>
+    <h2>Todos los activos</h2>
+    <div class="grilla" id="todas"></div>
+    <div class="dos">
+      <div><h2>Mapa de calor · tamaño = volumen, color = variación 24 h</h2><div id="mapa" style="height:430px"></div></div>
+      <div><h2>Detalle</h2><div class="tabla" id="tabla"></div></div>
+    </div>
+  </section>
+
+  <section class="solapa" id="s-flujo">
+    <div class="flujo">
+      <div>
+        <div class="controles" style="margin-top:0"><label>Libro de órdenes en vivo de <select id="cPar"></select></label></div>
+        <div id="flujoMarco"></div>
+        <p class="nota">Cada hilo es una operación: verde hacia arriba = compra agresiva, rojo hacia abajo = venta agresiva. Las que brillan son
+          las grandes (el 2 % más grande, mínimo US$ 50 mil en BTC/ETH y 5 mil en el resto).</p>
+      </div>
+      <div><h2 style="margin-top:4px">🟢 Más comprados ahora</h2><div class="grilla" id="masComprados" style="grid-template-columns:1fr"></div></div>
+    </div>
+  </section>
+
+  <footer>
+    <b>Cómo se calcula la presión de compra (−100 a +100):</b> con velas de 5 minutos y los últimos 15 minutos: 30 % volumen anómalo
+    (solo si dominan las compras), 30 % porcentaje de compras agresivas, 20 % momentum de 15 min y 10 % aceleración.
+    🔥 = presión de ±30 o más, volumen 2× lo normal, o un movimiento del día 5 puntos distinto del promedio del mercado.<br><br>
+    Herramienta educativa de análisis: <b>no es una recomendación de inversión</b>. Los datos son públicos de Binance y solo de ese exchange.
+  </footer>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
