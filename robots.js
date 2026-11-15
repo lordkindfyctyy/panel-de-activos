@@ -2,7 +2,7 @@
 // Los datos (robots/datos.json) los publica cada hora GitHub Actions desde el repo privado de los robots.
 (() => {
   const R = id => document.getElementById(id);
-  const COLORES = {'Bot 1': '#60a5fa', 'Bot 2': '#f59e0b', 'Bot 3': '#a78bfa', 'Bot 4': '#34d399', 'Bot 5': '#f472b6', 'BTC': '#9ca3af'};
+  const COLORES = {'Bot 1': '#60a5fa', 'Bot 2': '#f59e0b', 'Bot 3': '#a78bfa', 'Bot 4': '#34d399', 'Bot 5': '#f472b6', 'Bot 6': '#22d3ee', 'Bot 7': '#facc15', 'Bot 8': '#fb7185', 'Bot 9': '#4ade80', 'Bot 10': '#c084fc', 'Bot 11': '#f97316', 'Bot 12': '#38bdf8', 'Bot 13': '#a3e635', 'Bot 14': '#e879f9', 'Bot 15': '#fbbf24', 'BTC': '#9ca3af'};
   const escR = t => String(t).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
   const num = (v, d = 2) => (+v).toLocaleString('es-AR', {minimumFractionDigits: d, maximumFractionDigits: d});
   const sig = (v, d = 1) => isNaN(v) ? '—' : (v >= 0 ? '+' : '') + num(v, d);

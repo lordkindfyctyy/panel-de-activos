@@ -127,7 +127,7 @@
     const tot = d.bots.reduce((a, b) => a + b.valor, 0);
     D('dRobots').innerHTML = `
       <p class="nota">${d.total} operaciones ejecutadas en HelloDex simulado (se suman cada hora). Cada robot arrancó con 1.000 eUSDT; el valor está a precio de mercado.</p>
-      <div class="kpis">${d.bots.map(b => `<div class="kpi" style="border-left:4px solid ${({'Bot 1': '#60a5fa', 'Bot 2': '#f59e0b', 'Bot 3': '#a78bfa', 'Bot 4': '#34d399', 'Bot 5': '#f472b6'})[b.bot] || '#fff'}">
+      <div class="kpis">${d.bots.map(b => `<div class="kpi" style="border-left:4px solid ${({'Bot 1': '#60a5fa', 'Bot 2': '#f59e0b', 'Bot 3': '#a78bfa', 'Bot 4': '#34d399', 'Bot 5': '#f472b6', 'Bot 6': '#22d3ee', 'Bot 7': '#facc15', 'Bot 8': '#fb7185', 'Bot 9': '#4ade80', 'Bot 10': '#c084fc', 'Bot 11': '#f97316', 'Bot 12': '#38bdf8', 'Bot 13': '#a3e635', 'Bot 14': '#e879f9', 'Bot 15': '#fbbf24'})[b.bot] || '#fff'}">
         <span>${escD(b.bot)} en HelloDex</span><b>${n2(b.valor)} <small>eUSDT</small></b><small class="${b.resultado_pct >= 0 ? 'up' : 'down'}">${pc(b.resultado_pct)}${b.ajustes ? ' · ajustes ' + n2(b.ajustes) : ''}</small>
         <br><small>${b.posiciones.length ? b.posiciones.map(p => escD(p.moneda) + (p.fichas < 0 ? ' (corto)' : '')).join(', ') : 'todo en eUSDT'}</small></div>`).join('')}</div>
       <div class="tabla"><table><thead><tr><th>#</th><th>Robot</th><th>Cuándo</th><th>Operación</th><th>Entregó</th><th>Recibió</th><th>Precio robot → HelloDex</th><th>Deslizamiento</th><th>Movió el pool</th><th>Comprobante</th></tr></thead><tbody>
