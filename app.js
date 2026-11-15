@@ -251,6 +251,7 @@ function mostrarSolapa(nombre) {
   if (nombre !== 'flujo') { $('flujoMarco').innerHTML = ''; flujoPar = ''; }
   if (nombre === 'monitor') armarMonitor(true);
   if (nombre === 'flujo') armarFlujo(true);
+  if (nombre === 'robots' && window.abrirRobots) window.abrirRobots();
   if (nombre === 'tarjetas') { dibujarTarjetas(); setTimeout(() => window.Plotly && Plotly.Plots.resize('mapa'), 50); }
 }
 

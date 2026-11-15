@@ -67,6 +67,19 @@
     nav .largo { display: none; }
     .kpi b { font-size: 20px; }
   }
+  .candado { max-width: 420px; margin: 30px auto; text-align: center; background: var(--panel); border: 1px solid var(--borde);
+             border-radius: 16px; padding: 22px; }
+  .candado form { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 10px; }
+  .candado input[type=password] { flex: 1 1 180px; background: #0b0f15; color: var(--texto); border: 1px solid var(--borde);
+             border-radius: 8px; padding: 9px 10px; font: inherit; }
+  .candado button, .periodos button, button.chico { background: #1f2633; color: var(--texto); border: 1px solid var(--borde); border-radius: 8px;
+             padding: 8px 14px; font: inherit; cursor: pointer; }
+  .candado button { background: var(--acento); border-color: var(--acento); color: #fff; font-weight: 700; }
+  button.chico { padding: 3px 9px; font-size: 12px; }
+  .periodos { display: flex; gap: 6px; margin: 12px 0 6px; flex-wrap: wrap; }
+  .periodos button.activa { background: var(--acento); border-color: var(--acento); color: #fff; }
+  .aviso { background: #1c1a10; border: 1px solid #5b4a12; border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; font-size: 13px; line-height: 1.5; }
+  .chipR { display: inline-block; padding: 2px 9px; margin: 2px 4px 2px 0; border-radius: 999px; border: 1.5px solid; }
   footer { margin-top: 28px; color: var(--suave); font-size: 12px; border-top: 1px solid var(--borde); padding-top: 12px; }
 </style>
 </head>
@@ -92,6 +105,7 @@
     <button data-solapa="monitor" class="activa">📊 Monitor<span class="largo"> (libros en vivo)</span></button>
     <button data-solapa="tarjetas">🟩 Tarjetas<span class="largo"> y mapa de calor</span></button>
     <button data-solapa="flujo">🧵 Flujo<span class="largo"> de un activo</span></button>
+    <button data-solapa="robots">🤖 Robots</button>
   </nav>
 
   <section class="solapa activa" id="s-monitor">
@@ -126,6 +140,41 @@
     </div>
   </section>
 
+  <section class="solapa" id="s-robots">
+    <div id="rbCandado" class="candado">
+      <h2>🔒 Robots de práctica</h2>
+      <p class="nota">Esta parte es privada. Poné la clave para ver los resultados.</p>
+      <form id="rbForm">
+        <input id="rbClave" type="password" placeholder="Clave" autocomplete="current-password" required minlength="6">
+        <button type="submit">Ver</button>
+        <label class="nota"><input id="rbRecordar" type="checkbox"> recordar en este dispositivo</label>
+      </form>
+      <p id="rbError" class="down"></p>
+    </div>
+    <div id="rbContenido" style="display:none">
+      <div class="aviso">🧪 <b>Práctica, sin plata real:</b> cada robot arrancó con 1.000 USDT virtuales y opera con precios reales de Binance.
+        Corren solos cada hora. No es ganancia real ni una recomendación de inversión.
+        <span class="nota" id="rbActualizado"></span> <button id="rbSalir" class="chico">Cerrar</button></div>
+      <div class="kpis" id="rbBots"></div>
+      <h2>En vivo, desde que arrancaron</h2>
+      <div id="rbVivo" style="height:340px"></div>
+      <h2>Simulación con datos que no vieron al elegirse (jul 2024 → hoy)</h2>
+      <div id="rbSim" style="height:340px"></div>
+      <div class="periodos">
+        <button data-periodo="dia">Día</button><button data-periodo="semana">Semana</button>
+        <button data-periodo="mes" class="activa">Mes</button><button data-periodo="anio">Año</button>
+      </div>
+      <p id="rbGanador" class="nota"></p>
+      <div class="tabla" id="rbTablaSim"></div>
+      <div class="dos">
+        <div><h2>Qué tiene cada robot ahora</h2><div class="tabla" id="rbPos"></div></div>
+        <div><h2>Últimas operaciones</h2><div class="tabla" id="rbOps"></div></div>
+      </div>
+      <h2>Año por año (simulación 2020 → hoy)</h2>
+      <div class="tabla" id="rbAnual"></div>
+    </div>
+  </section>
+
   <footer>
     <b>Cómo se calcula la presión de compra (−100 a +100):</b> con velas de 5 minutos y los últimos 15 minutos: 30 % volumen anómalo
     (solo si dominan las compras), 30 % porcentaje de compras agresivas, 20 % momentum de 15 min y 10 % aceleración.
@@ -134,5 +183,6 @@
   </footer>
 </div>
 <script src="app.js"></script>
+<script src="robots.js"></script>
 </body>
 </html>
