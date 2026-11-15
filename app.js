@@ -213,9 +213,14 @@ async function armarMonitor(forzar = false) {
   const marco = $('monitorMarco');
   marco.innerHTML = '';
   const fr = document.createElement('iframe');
-  fr.style.height = (130 + 196 * filas.length) + 'px'; fr.style.minWidth = '760px'; fr.srcdoc = html; fr.title = 'Monitor de libros en vivo';
+  fr.style.height = (130 + 196 * filas.length) + 'px'; fr.srcdoc = html; fr.title = 'Monitor de libros en vivo';
   marco.appendChild(fr);
 }
+
+window.addEventListener('message', e => {
+  const fr = $('monitorMarco').querySelector('iframe');
+  if (fr && e.source === fr.contentWindow && e.data && e.data.altoMonitor > 50) fr.style.height = e.data.altoMonitor + 'px';
+});
 
 let flujoPar = '';
 async function armarFlujo(forzar = false) {
