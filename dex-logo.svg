@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="HelloDex">
+  <!-- Logo original de HelloDex: perrito blanco y negro con aureola. Se mueve solo (cola, orejas, parpadeo, aureola). -->
+  <style>
+    .cola { transform-origin: 82px 84px; animation: cola .45s ease-in-out infinite alternate; }
+    .oreja-i { transform-origin: 38px 34px; animation: oreja 3.2s ease-in-out infinite; }
+    .oreja-d { transform-origin: 70px 34px; animation: oreja 3.2s ease-in-out infinite .2s; }
+    .ojos { transform-origin: 54px 52px; animation: parpadeo 4s infinite; }
+    .halo { animation: flota 2.4s ease-in-out infinite alternate; }
+    .cabeza { transform-origin: 54px 70px; animation: ladea 6s ease-in-out infinite; }
+    @keyframes cola { from { transform: rotate(-18deg); } to { transform: rotate(22deg); } }
+    @keyframes oreja { 0%, 80%, 100% { transform: rotate(0); } 86% { transform: rotate(-10deg); } 92% { transform: rotate(4deg); } }
+    @keyframes parpadeo { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+    @keyframes flota { from { transform: translateY(0); } to { transform: translateY(-3px); } }
+    @keyframes ladea { 0%, 70%, 100% { transform: rotate(0); } 78% { transform: rotate(-6deg); } 88% { transform: rotate(-6deg); } }
+    @media (prefers-reduced-motion: reduce) { .cola, .oreja-i, .oreja-d, .ojos, .halo, .cabeza { animation: none; } }
+  </style>
+
+  <!-- sombra -->
+  <ellipse cx="58" cy="110" rx="34" ry="5" fill="#888" opacity=".35"/>
+
+  <!-- cola -->
+  <g class="cola">
+    <path d="M82 84 C96 80 102 66 98 56" fill="none" stroke="#e8e8e8" stroke-width="12" stroke-linecap="round"/>
+    <path d="M82 84 C96 80 102 66 98 56" fill="none" stroke="#111" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="98" cy="56" r="3.2" fill="#fff"/>
+  </g>
+
+  <!-- cuerpo sentado -->
+  <path d="M30 108 C26 86 34 70 54 68 C76 68 86 84 84 108 Z" fill="#fff" stroke="#111" stroke-width="3"/>
+  <path d="M60 72 C74 72 82 84 80 100 C72 96 64 86 60 72 Z" fill="#111"/>
+  <!-- patitas -->
+  <ellipse cx="44" cy="107" rx="8" ry="5" fill="#fff" stroke="#111" stroke-width="3"/>
+  <ellipse cx="64" cy="107" rx="8" ry="5" fill="#fff" stroke="#111" stroke-width="3"/>
+
+  <!-- cabeza -->
+  <g class="cabeza">
+    <g class="oreja-i"><path d="M34 30 C24 34 22 52 28 60 C34 56 38 46 40 36 Z" fill="#111" stroke="#e8e8e8" stroke-width="2.5" stroke-linejoin="round"/></g>
+    <g class="oreja-d"><path d="M74 30 C84 34 86 52 80 60 C74 56 70 46 68 36 Z" fill="#111" stroke="#e8e8e8" stroke-width="2.5" stroke-linejoin="round"/></g>
+    <ellipse cx="54" cy="50" rx="24" ry="22" fill="#fff" stroke="#111" stroke-width="3"/>
+    <!-- mancha negra en un ojo -->
+    <path d="M58 34 C70 32 77 42 74 52 C68 54 60 50 58 44 Z" fill="#111"/>
+    <g class="ojos">
+      <circle cx="46" cy="50" r="3.6" fill="#111"/>
+      <circle cx="64" cy="48" r="3.6" fill="#fff"/>
+      <circle cx="47" cy="49" r="1.1" fill="#fff"/>
+      <circle cx="64.6" cy="47" r="1.1" fill="#111"/>
+    </g>
+    <!-- hocico -->
+    <ellipse cx="54" cy="61" rx="10" ry="7" fill="#fff" stroke="#111" stroke-width="2.5"/>
+    <ellipse cx="54" cy="58" rx="4" ry="3" fill="#111"/>
+    <path d="M54 61 V64 M54 64 C51 67 48 66 47 64 M54 64 C57 67 60 66 61 64" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round"/>
+  </g>
+
+  <!-- aureola -->
+  <g class="halo">
+    <ellipse cx="54" cy="17" rx="17" ry="5" fill="none" stroke="#111" stroke-width="5"/>
+    <ellipse cx="54" cy="17" rx="17" ry="5" fill="none" stroke="#fff" stroke-width="2.2"/>
+  </g>
+</svg>

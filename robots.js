@@ -37,6 +37,7 @@
     try {
       const archivo = await bajar();
       datos = await descifrar(archivo, clave);
+      window.datosRobots = datos; window.dispatchEvent(new Event('robots-datos'));
       guardarClave(clave, recordar);
       R('rbCandado').style.display = 'none'; R('rbContenido').style.display = 'block';
       dibujar();
