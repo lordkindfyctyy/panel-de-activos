@@ -1,0 +1,41 @@
+# ¿Cuánto acierta el simulador? Cada hora guarda las predicciones de los 3 activos con mejores señales y revisa las de hace 24 h;
+# una vez por día rehace la prueba con el pasado (90 días). Resultado en la rama "datos-sim" (predicciones.json), que el panel lee
+# desde raw.githubusercontent.com (no reconstruye la página). En repos públicos los minutos de Actions son gratis.
+name: Simulador
+
+on:
+  schedule:
+    - cron: "20 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: simulador
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  simulador:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar
+        run: pip install numpy
+      - name: Predecir, revisar y probar con el pasado
+        run: python simulador/calibrar.py salida/predicciones.json
+      - name: Guardar en la rama datos-sim (un solo commit, sin historial)
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd salida
+          git init -q -b datos-sim
+          git config user.name "simulador-del-panel"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add predicciones.json
+          git commit -q -m "Predicciones $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" datos-sim

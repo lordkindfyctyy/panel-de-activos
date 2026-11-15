@@ -105,6 +105,7 @@
   .nivel { font-size: 10px; font-weight: 800; text-transform: uppercase; padding: 1px 7px; border-radius: 5px; background: #2a303c; color: var(--suave); }
   .nivel.alto { background: #7f1d1d; color: #fecaca; } .nivel.medio { background: #78350f; color: #fde68a; }
   .fuerte { color: #fbbf24; }
+  h3.sub3 { font-size: 14px; margin: 12px 0 6px; color: var(--suave); }
   footer { margin-top: 28px; color: var(--suave); font-size: 12px; border-top: 1px solid var(--borde); padding-top: 12px; }
 </style>
 </head>
@@ -182,6 +183,15 @@
     <div id="sGrafico" style="height:400px"></div>
     <div class="dos sim"><div id="sModelo"></div><div id="sHistoria"></div></div>
     <p class="nota" id="sExplica"></p>
+    <h2>🎯 ¿Cuánto acierta el simulador?</h2>
+    <p class="nota" id="cVeredicto">Cargando la prueba con el pasado…</p>
+    <div class="kpis" id="cResumen"></div>
+    <div class="dos">
+      <div><h3 class="sub3">Lo que dijo vs. lo que pasó (tocar el objetivo en 24 h)</h3><div id="cGrafico" style="height:320px"></div>
+        <p class="nota">Si la línea va pegada a la diagonal, cuando dice 60 % pasa el 60 % de las veces. Por eso las tarjetas muestran también la
+          probabilidad <b>realista</b>: lo que pasó de verdad cuando el simulador dijo algo parecido.</p></div>
+      <div><h3 class="sub3">Predicciones en vivo</h3><div id="cVivo"></div></div>
+    </div>
     <h2>📰 Noticias en vivo y cómo movieron el precio</h2>
     <p class="nota" id="nEstado"></p>
     <div class="kpis" id="nResumen"></div>

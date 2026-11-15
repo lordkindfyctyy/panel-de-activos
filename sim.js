@@ -13,7 +13,63 @@
   const sd = a => { const m = a.reduce((x, y) => x + y, 0) / a.length; return Math.sqrt(a.reduce((x, y) => x + (y - m) ** 2, 0) / a.length); };
   const mediana = a => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : NaN; };
   const hace = iso => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 60 ? m + ' min' : m < 1440 ? Math.round(m / 60) + ' h' : Math.round(m / 1440) + ' d'; };
-  let noticias = [], ultimoTop = 0, simActual = null;
+  const RAW_SIM = 'https://raw.githubusercontent.com/lordkindfyctyy/panel-de-activos/datos-sim/predicciones.json';
+  let noticias = [], ultimoTop = 0, simActual = null, calib = null;
+
+  // ------------------------------------------------------------ cuánto acierta (calibración)
+  // probabilidad "realista": lo que realmente pasó cuando el modelo dijo algo parecido (prueba con el pasado)
+  function realista(p, clave) {
+    const c = calib && calib.prueba && calib.prueba.resumen && calib.prueba.resumen[clave];
+    if (!c) return null;
+    const cub = c.cubetas.find(x => p >= x.desde && p < x.desde + 0.1 + (x.desde >= 0.9 ? 0.01 : 0));
+    return cub && cub.n >= 20 ? cub.paso : null;
+  }
+  const direccionSirve = () => { const d = calib && calib.prueba && calib.prueba.resumen && calib.prueba.resumen.direccion; return d ? d.acierto >= 0.55 : true; };
+  async function cargarCalibracion() {
+    try {
+      const r = await fetch(RAW_SIM + '?t=' + Math.floor(Date.now() / 300000), {cache: 'no-store'});
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      calib = await r.json();
+    } catch (e) { calib = null; }
+    dibujarCalibracion();
+  }
+  function dibujarCalibracion() {
+    const caja = S('cResumen');
+    const r = calib && calib.prueba && calib.prueba.resumen;
+    if (!r) { caja.innerHTML = '<p class="nota">Todavía calculando la prueba con el pasado (tarda unos minutos la primera vez).</p>'; return; }
+    const m = r.mc24, h = r.hist24, d = r.direccion;
+    const mejora = Math.max(m.mejora, h.mejora);
+    const cubBuena = m.cubetas.filter(c => c.n >= 50).sort((a, b) => b.dijo - a.dijo)[0];
+    S('cVeredicto').innerHTML = `<b>Veredicto con ${r.n.toLocaleString('es-AR')} predicciones de prueba</b> (${calib.prueba.dias} días, cada ${calib.prueba.cada_horas} h,
+      ${calib.prueba.monedas.length} monedas, usando solo lo que se sabía en cada momento):
+      ${mejora >= 0.1 ? 'las probabilidades de tocar el objetivo <b>son útiles</b>.' : mejora > 0.01 ? 'las probabilidades de tocar el objetivo están <b>bien en tamaño</b> pero ayudan <b>poco</b>: apenas mejoran a suponer siempre el promedio.' : 'las probabilidades de tocar el objetivo <b>no ayudan</b>: suponer siempre el promedio da lo mismo.'}
+      ${d.acierto < 0.55 ? ' La dirección ("sube en 24 h") <b>no sirve</b>: acierta como tirar una moneda.' : ' La dirección acierta más que una moneda.'}
+      ${r.rango < 0.86 ? ` El rango del 90 % es <b>un poco angosto</b>: el precio quedó adentro el ${prob(r.rango)} de las veces.` : ''}`;
+    caja.innerHTML = `
+      <div class="kpi"><span>Toca el objetivo en 24 h</span><b>${cubBuena ? prob(cubBuena.paso) : '—'}</b><small>pasó cuando dijo ~${cubBuena ? prob(cubBuena.dijo) : '—'}</small></div>
+      <div class="kpi"><span>Mejora sobre suponer el promedio</span><b>${n2(mejora * 100, 1)}%</b><small>0 % = no ayuda · 100 % = perfecto</small></div>
+      <div class="kpi"><span>Acierta la dirección (sube en 24 h)</span><b class="${d.acierto >= 0.55 ? 'up' : 'down'}">${prob(d.acierto)}</b><small>50 % = como tirar una moneda</small></div>
+      <div class="kpi"><span>El precio quedó dentro del rango del 90 %</span><b>${prob(r.rango)}</b><small>lo ideal es 90 %</small></div>`;
+    if (window.Plotly) {
+      const linea = (c, nombre, color) => ({x: c.cubetas.map(x => x.dijo * 100), y: c.cubetas.map(x => x.paso * 100), text: c.cubetas.map(x => x.n + ' casos'),
+        name: nombre, mode: 'lines+markers', line: {color, width: 2.5}, marker: {size: c.cubetas.map(x => Math.min(16, 5 + Math.sqrt(x.n) / 2))},
+        hovertemplate: 'dijo %{x:.0f}% → pasó %{y:.0f}% (%{text})<extra>' + nombre + '</extra>'});
+      Plotly.react('cGrafico', [
+        {x: [0, 100], y: [0, 100], mode: 'lines', line: {color: '#6b7280', dash: 'dot', width: 1}, name: 'Perfecto (dijo = pasó)', hoverinfo: 'skip'},
+        linea(m, '1000 simulaciones (24 h)', '#60a5fa'), linea(h, 'Casos parecidos (24 h)', '#f59e0b')],
+        {margin: {t: 10, l: 50, r: 10, b: 40}, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {color: '#e5e7eb'},
+         xaxis: {title: {text: 'Probabilidad que dio (%)'}, range: [0, 100], gridcolor: '#262c38'}, yaxis: {title: {text: 'Lo que pasó (%)'}, range: [0, 100], gridcolor: '#262c38'},
+         legend: {orientation: 'h', y: -0.25}}, {displayModeBar: false, responsive: true});
+    }
+    const vivo = (calib.vivo || []).slice().reverse().slice(0, 15);
+    const vr = calib.vivo_resumen;
+    S('cVivo').innerHTML = (vr ? `<p class="nota">En vivo: ${vr.n} predicciones con resultado · tocó el objetivo en 24 h el ${prob(vr.mc24.paso)} (el modelo decía ${prob(vr.mc24.dijo)} en promedio).</p>`
+      : '<p class="nota">En vivo: se guarda una predicción por hora de los 3 mejores; el resultado aparece 24 h después.</p>') +
+      '<div class="tabla"><table><thead><tr><th>Cuándo</th><th>Activo</th><th>Objetivo</th><th>Dijo (24 h)</th><th>¿Lo tocó?</th><th>¿Subió?</th></tr></thead><tbody>' +
+      vivo.map(p => `<tr><td>${escS(new Date(p.t).toLocaleString('es-AR', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'}))}</td>
+        <td>${escS(p.par.replace('USDT', ''))}</td><td>${precioS(p.objetivo)} <span class="${p.rel >= 0 ? 'up' : 'down'}">${pc(p.rel * 100)}</span></td>
+        <td>${prob(p.mc24)}</td><td>${p.res ? (p.res.toco24 ? '✅' : '❌') : '⏳'}</td><td>${p.res ? (p.res.subio24 ? '⬆️' : '⬇️') : '⏳'}</td></tr>`).join('') + '</tbody></table></div>';
+  }
 
   // ------------------------------------------------------------ datos
   async function velasHora(sym) {
@@ -136,9 +192,9 @@
         <div class="chico">Presión ${f.puntaje >= 0 ? '+' : ''}${Math.round(f.puntaje)} · 1 h ${pc(f.mom1h || 0, 2)} · noticias 6 h: ${f.nt.cuantas}${f.nt.cuantas ? (f.nt.neto > 0 ? ' 🟢' : f.nt.neto < 0 ? ' 🔴' : ' ⚪') : ''}</div>
         <div class="objetivo">Objetivo 24 h: <b>${precioS(a.objetivo)}</b> <span class="${a.rel >= 0 ? 'up' : 'down'}">(${pc(a.rel * 100)})</span></div>
         <div class="probs">
-          <div><span>Lo toca en 12 h</span><b>${prob(a.mc.toca12)}</b><small>pasado ${prob(a.hist.llego12)}</small></div>
-          <div><span>Lo toca en 24 h</span><b>${prob(a.mc.toca24)}</b><small>pasado ${prob(a.hist.llego24)}</small></div>
-          <div><span>Sube en 24 h</span><b>${prob(a.hist.sube24)}</b><small>en casos parecidos</small></div>
+          <div><span>Lo toca en 12 h</span><b>${prob(a.mc.toca12)}</b><small>${realista(a.mc.toca12, 'mc12') != null ? 'realista ' + prob(realista(a.mc.toca12, 'mc12')) : 'pasado ' + prob(a.hist.llego12)}</small></div>
+          <div><span>Lo toca en 24 h</span><b>${prob(a.mc.toca24)}</b><small>${realista(a.mc.toca24, 'mc24') != null ? 'realista ' + prob(realista(a.mc.toca24, 'mc24')) : 'pasado ' + prob(a.hist.llego24)}</small></div>
+          <div><span>Sube en 24 h</span><b${direccionSirve() ? '' : ' style="opacity:.45"'}>${prob(a.hist.sube24)}</b><small>${direccionSirve() ? 'en casos parecidos' : '≈ moneda al aire'}</small></div>
         </div></div>`).join('') || '<p class="nota">No pude calcular ahora, reintento en un rato.</p>';
     S('top3').querySelectorAll('.top').forEach(el => el.addEventListener('click', () => { S('sActivo').value = el.dataset.sym; S('sObjetivo').value = ''; correrSimulacion(); S('sGrafico').scrollIntoView({behavior: 'smooth', block: 'center'}); }));
     if (!simActual && res[0]) { S('sActivo').value = res[0].a.sym; dibujarSimulacion(res[0].a); }
@@ -183,12 +239,13 @@
       <tr><td>Objetivo ${a.manual ? '(el tuyo)' : '(del modelo)'}</td><td><b>${precioS(a.objetivo)}</b> <span class="${a.rel >= 0 ? 'up' : 'down'}">${pc(a.rel * 100)}</span></td></tr>
       <tr><td>Lo toca en las próximas 12 h</td><td><b>${prob(a.mc.toca12)}</b></td></tr>
       <tr><td>Lo toca en las próximas 24 h</td><td><b>${prob(a.mc.toca24)}</b></td></tr>
+      ${realista(a.mc.toca24, 'mc24') != null ? `<tr><td>Realista (según cómo acertó antes)</td><td><b>${prob(realista(a.mc.toca24, 'mc24'))}</b></td></tr>` : ''}
       <tr><td>Termina más arriba en 12 h / 24 h</td><td>${prob(a.mc.sube12)} / ${prob(a.mc.sube24)}</td></tr>
       <tr><td>Rango probable en 12 h (90 %)</td><td>${precioS(a.mc.rango12[0])} – ${precioS(a.mc.rango12[1])}</td></tr>
       <tr><td>Rango probable en 24 h (90 %)</td><td>${precioS(a.mc.rango24[0])} – ${precioS(a.mc.rango24[1])}</td></tr>
       <tr><td>Agitación del mercado ahora</td><td>${n2(a.mc.escala, 1)}× lo normal</td></tr></tbody></table>`;
     S('sHistoria').innerHTML = `<h3>📚 ${a.hist.casos} momentos parecidos del pasado</h3><table><tbody>
-      <tr><td>Subió en las 24 h siguientes</td><td><b>${prob(a.hist.sube24)}</b> de las veces</td></tr>
+      <tr><td>Subió en las 24 h siguientes</td><td><b>${prob(a.hist.sube24)}</b> de las veces${direccionSirve() ? '' : ' <span class="nota">(no predice: ≈ moneda)</span>'}</td></tr>
       <tr><td>Movimiento típico en 24 h</td><td class="${a.hist.mov24 >= 0 ? 'up' : 'down'}">${pc(a.hist.mov24 * 100)}</td></tr>
       <tr><td>Llegó al objetivo en 12 h</td><td><b>${prob(a.hist.llego12)}</b></td></tr>
       <tr><td>Llegó al objetivo en 24 h</td><td><b>${prob(a.hist.llego24)}</b></td></tr></tbody></table>`;
@@ -237,7 +294,7 @@
   S('sSimular').addEventListener('click', correrSimulacion);
   S('nMoneda').addEventListener('change', dibujarNoticias);
   window.abrirSimulador = () => {
-    llenarActivos(); cargarNoticias().then(() => armarTop3());
+    llenarActivos(); cargarCalibracion().then(cargarNoticias).then(() => armarTop3());
     if (simActual) setTimeout(() => window.Plotly && Plotly.Plots.resize('sGrafico'), 50);
   };
   setInterval(() => { if (S('s-simulador').classList.contains('activa')) { cargarNoticias(); armarTop3(); llenarActivos(); } }, 60e3);
