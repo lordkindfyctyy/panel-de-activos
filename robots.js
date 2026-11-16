@@ -83,6 +83,73 @@
     return [...grupos.entries()].map(([k, g]) => ({periodo: k, ...Object.fromEntries(columnas.map(c => [c, (g.fin[c] / g.inicio[c] - 1) * 100]))}));
   }
 
+
+  // ---- posiciones abiertas en vivo, con apalancamiento ajustable ----
+  // El apalancamiento es una simulación de la pantalla ("¿y si hubiera entrado con Nx?"): los robots operan a 1x y no cambia lo que hacen.
+  // Resultado sobre el monto invertido: apalancamiento × lado × (precio ahora / precio de entrada − 1). Si el precio llega al nivel de liquidación se pierde todo.
+  const NIVELES = [1, 2, 3, 5, 10, 20, 50];
+  let apal = {}, precios = {}, horaPrecios = null, timerVivo = null;
+  try { apal = JSON.parse(localStorage.getItem('panel.apalancamientos') || '{}'); } catch (e) { apal = {}; }
+  const guardarApal = () => { try { localStorage.setItem('panel.apalancamientos', JSON.stringify(apal)); } catch (e) {} };
+  const claveApal = x => x.bot + '|' + x.moneda;
+  const lev = x => apal[claveApal(x)] || apal['*'] || 1;
+  const fPrecio = v => v == null ? '—' : (+v).toLocaleString('es-AR', {maximumFractionDigits: v < 1 ? 6 : v < 100 ? 4 : 2});
+  const fHora = s => s ? String(s).slice(5, 16).replace('T', ' ') : '—';
+  const opcionesApal = sel => NIVELES.map(n => `<option value="${n}"${n === sel ? ' selected' : ''}>${n}x</option>`).join('');
+
+  function abiertasVivo() {
+    const abi = datos.abiertas || [];
+    clearInterval(timerVivo);
+    if (!abi.length) { R('rbApal').innerHTML = ''; R('rbAbiertas').innerHTML = '<p class="nota">Ninguna posición abierta.</p>'; R('rbAbiertasNota').textContent = ''; return; }
+    R('rbApal').innerHTML = `<label>Apalancamiento de todas <select id="rbApalTodas"><option value="">(cada una)</option>${NIVELES.map(n => `<option value="${n}"${apal['*'] === n ? ' selected' : ''}>${n}x</option>`).join('')}</select></label>
+      <span class="sub" id="rbPreciosHora">Conectando con Binance…</span>`;
+    R('rbApalTodas').onchange = e => { apal = e.target.value ? {'*': +e.target.value} : {}; guardarApal(); pintar(); };
+    R('rbAbiertas').onchange = e => { if (e.target.dataset.k) { apal[e.target.dataset.k] = +e.target.value; delete apal['*']; guardarApal(); pintar(); } };
+    pintar();
+    const simbolos = [...new Set(abi.map(x => x.simbolo || x.moneda + 'USDT'))];
+    const traer = async () => {
+      try {
+        const r = await fetch('https://api.binance.com/api/v3/ticker/price?symbols=' + encodeURIComponent(JSON.stringify(simbolos)));
+        if (!r.ok) throw new Error(r.status);
+        (await r.json()).forEach(p => { precios[p.symbol] = +p.price; });
+        horaPrecios = new Date(); pintar();
+      } catch (e) { const el = R('rbPreciosHora'); if (el) el.textContent = 'Sin precios en vivo de Binance: se muestran los de la última actualización.'; }
+    };
+    traer(); timerVivo = setInterval(traer, 5000);
+  }
+
+  function pintar() {
+    const abi = datos && datos.abiertas || [];
+    const hayEntrada = abi.some(x => x.precio_entrada);
+    let filas = '', total = {};
+    abi.forEach(x => {
+      const s = x.lado === 'corto' ? -1 : 1, L = lev(x), sim = x.simbolo || x.moneda + 'USDT', p = precios[sim], e = x.precio_entrada, inv = x.invertido;
+      let pctL = null, usd = null, liq = null, muerta = false;
+      if (e && p) {
+        const mov = s * (p / e - 1);
+        pctL = L * mov * 100;
+        muerta = L * mov <= -1;
+        if (muerta) pctL = -100;
+        if (inv) usd = inv * pctL / 100;
+      } else if (x.va_pct != null) { pctL = x.va_pct * L; if (inv) usd = inv * pctL / 100; }
+      if (e) liq = s === 1 ? e * (1 - 1 / L) : e * (1 + 1 / L);
+      total[x.bot] = (total[x.bot] || 0) + (usd || 0);
+      filas += `<tr><td>${escR(x.bot)}</td><td>${escR(x.moneda)}</td><td class="${x.lado === 'corto' ? 'down' : 'up'}">${escR(x.lado)}</td>
+        <td>${escR(fHora(x.desde))}</td><td>${fPrecio(e)}</td><td>${fPrecio(p)}</td>
+        <td><select data-k="${escR(claveApal(x))}">${opcionesApal(L)}</select></td>
+        <td title="Si el precio llega ahí, la posición se liquida y se pierde lo invertido">${L > 1 ? fPrecio(liq) : '—'}</td>
+        <td>${inv ? num(inv) : '—'}</td>
+        <td class="${pctL >= 0 ? 'up' : 'down'}">${muerta ? 'liquidada' : sig(pctL, 2) + ' %'}</td>
+        <td class="${usd >= 0 ? 'up' : 'down'}">${usd == null ? '—' : sig(usd, 2)}</td></tr>`;
+    });
+    const resumen = Object.entries(total).map(([b, v]) => `<span class="chipR" style="border-color:${COLORES[b] || '#fff'}">${escR(b)} <b class="${v >= 0 ? 'up' : 'down'}">${sig(v, 2)} USDT</b></span>`).join(' ');
+    R('rbAbiertas').innerHTML = '<table><thead><tr><th>Robot</th><th>Moneda</th><th>Lado</th><th>Entró</th><th>Precio entrada</th><th>Precio ahora</th><th>Apal.</th><th>Se liquida en</th><th>Invertido</th><th>Resultado</th><th>USDT</th></tr></thead><tbody>' + filas + '</tbody></table>';
+    R('rbAbiertasNota').innerHTML = (resumen ? 'Resultado en vivo por robot: ' + resumen + '<br>' : '') +
+      'Los robots operan a <b>1x</b>. El apalancamiento de esta tabla es una simulación (¿y si hubiera entrado con Nx?): multiplica ganancias y pérdidas, y a 20x una caída del 5 % en contra ya liquida. No cambia lo que hacen los robots.' +
+      (hayEntrada ? '' : ' Faltan el precio y la hora de entrada: aparecen en la próxima actualización de los robots.');
+    const el = R('rbPreciosHora'); if (el && horaPrecios) el.textContent = '● En vivo · precios de Binance ' + horaPrecios.toLocaleTimeString('es-AR') + ' · cada 5 s';
+  }
+
   function dibujar() {
     if (!datos) return;
     R('rbActualizado').textContent = 'Actualizado ' + hace(datos.actualizado) + ' (' + new Date(datos.actualizado).toLocaleString('es-AR') + ')';
@@ -137,10 +204,7 @@
           <td>${ab.length ? ab.length + ' (' + gan + ' ganando)' : '—'}</td></tr>`;
       }).join('') + '</tbody></table><p class="nota">Factor = lo que ganó ÷ lo que perdió en las operaciones cerradas (más de 1 = gana más de lo que pierde). Se completa a medida que los robots cierran operaciones.</p>'
       : '<p class="nota">Sin datos todavía.</p>';
-    const abi = datos.abiertas || [];
-    R('rbAbiertas').innerHTML = abi.length ? '<table><thead><tr><th>Robot</th><th>Moneda</th><th>Lado</th><th>Va</th></tr></thead><tbody>' +
-      abi.map(x => `<tr><td>${escR(x.bot)}</td><td>${escR(x.moneda)}</td><td class="${x.lado === 'corto' ? 'down' : 'up'}">${escR(x.lado)}</td><td class="${x.va_pct >= 0 ? 'up' : 'down'}">${sig(x.va_pct, 2)} %</td></tr>`).join('') + '</tbody></table>'
-      : '<p class="nota">Ninguna posición abierta.</p>';
+    abiertasVivo();
     const bit = datos.bitacora || [];
     R('rbBitacora').innerHTML = bit.length ? '<table><thead><tr><th>Robot</th><th>Moneda</th><th>Lado</th><th>Entrada → salida</th><th>Resultado</th><th>Por qué salió</th></tr></thead><tbody>' +
       bit.slice(0, 80).map(x => `<tr><td>${escR(x.bot)}</td><td>${escR(x.moneda)}</td><td>${escR(x.lado)}</td>
